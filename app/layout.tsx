@@ -7,6 +7,10 @@ export const metadata: Metadata = {
   title: "Doppler 空投计算器 | Points Lab",
   description: "查询 Ethereum 与 XRPL 地址的 Doppler 积分、排名，并按自定义空投池估算代币数量。",
   keywords: ["Doppler", "Airdrop", "Points", "XRPL", "Ethereum"],
+  icons: {
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
