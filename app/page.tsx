@@ -136,8 +136,8 @@ export default function Home() {
   const [selected, setSelected] = useState<WalletRecord | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [airdropPool, setAirdropPool] = useState("100000000");
-  const [tokenPrice, setTokenPrice] = useState("");
+  const [estimatedFdv, setEstimatedFdv] = useState("200000000");
+  const [airdropRatio, setAirdropRatio] = useState("5");
   const [scope, setScope] = useState<"global" | "chain">("global");
   const [copied, setCopied] = useState(false);
 
@@ -187,16 +187,16 @@ export default function Home() {
   );
 
   const totalPoints = Number(summary?.all_seasons_total_dp ?? 0);
-  const pool = Number(airdropPool) || 0;
-  const price = Number(tokenPrice) || 0;
+  const fdv = Number(estimatedFdv) || 0;
+  const ratio = Math.min(Math.max(Number(airdropRatio) || 0, 0), 100);
   const denominator = selected
     ? scope === "chain"
       ? chainTotals[selected.chain] ?? 0
       : totalPoints
     : totalPoints;
   const walletShare = selected && denominator > 0 ? selected.total / denominator : 0;
-  const estimatedTokens = pool * walletShare;
-  const estimatedValue = estimatedTokens * price;
+  const airdropValuation = fdv * (ratio / 100);
+  const estimatedValue = airdropValuation * walletShare;
   const leadingPercent = selected && summary ? ((summary.wallets - selected.rank) / summary.wallets) * 100 : 0;
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
@@ -255,7 +255,7 @@ export default function Home() {
           <div className="hero__aside">
             <p>
               搜索 Ethereum 或 XRPL 地址，查看 Season 1 + Season 2 积分、全局排名，
-              并按你设定的空投池估算可获得的代币数量。
+              并按你设定的 $XDP FDV 与空投比例直接估算美元价值。
             </p>
             <a className="primary-button" href="#calculator">开始计算 <span>↗</span></a>
           </div>
@@ -354,32 +354,32 @@ export default function Home() {
 
           <article className="estimate-card">
             <div className="estimate-card__head">
-              <span>空投情景</span>
-              <b>WHAT IF?</b>
+              <span>$XDP 空投情景</span>
+              <b>$XDP</b>
             </div>
             <div className="scope-toggle" role="group" aria-label="积分池范围">
               <button type="button" className={scope === "global" ? "active" : ""} onClick={() => setScope("global")}>全体积分池</button>
               <button type="button" className={scope === "chain" ? "active" : ""} onClick={() => setScope("chain")}>同链积分池</button>
             </div>
             <label className="number-field">
-              <span>{scope === "global" ? "全体空投代币池" : `${selected ? chainName(selected.chain) : "该链"} 空投代币池`}</span>
-              <div><input type="number" min="0" step="1000000" value={airdropPool} onChange={(event) => setAirdropPool(event.target.value)} /><em>Token</em></div>
+              <span>$XDP 预估 FDV</span>
+              <div><input type="number" min="0" step="10000000" value={estimatedFdv} onChange={(event) => setEstimatedFdv(event.target.value)} /><em>USD</em></div>
             </label>
             <label className="number-field">
-              <span>预估代币价格 <small>（可选）</small></span>
-              <div><input type="number" min="0" step="0.001" placeholder="0.00" value={tokenPrice} onChange={(event) => setTokenPrice(event.target.value)} /><em>USD</em></div>
+              <span>预估空投比例</span>
+              <div><input type="number" min="0" max="100" step="0.5" value={airdropRatio} onChange={(event) => setAirdropRatio(event.target.value)} /><em>%</em></div>
             </label>
             <div className="estimate-output">
-              <span>你的预估空投</span>
-              <strong>{selected ? formatNumber(estimatedTokens) : "—"}</strong>
-              <small>Token</small>
+              <span>你的 $XDP 预估空投价值</span>
+              <strong>{selected ? `$${formatNumber(estimatedValue)}` : "—"}</strong>
+              <small>USD</small>
             </div>
             <div className="estimate-meta">
               <div><span>积分占比</span><strong>{selected ? formatPercent(walletShare * 100, 6) : "—"}</strong></div>
-              <div><span>预估价值</span><strong>{selected && price > 0 ? `$${formatNumber(estimatedValue)}` : "—"}</strong></div>
+              <div><span>$XDP 空投池估值</span><strong>{`$${formatNumber(airdropValuation)}`}</strong></div>
             </div>
             <p className="estimate-note">
-              估算公式：钱包积分 ÷ 所选积分池总积分 × 空投代币池。实际分配规则可能包含门槛、分层或其他系数。
+              估算公式：$XDP FDV × 空投比例 × 钱包在所选积分池中的占比。实际分配规则可能包含门槛、分层或其他系数。
             </p>
           </article>
         </div>
@@ -419,7 +419,7 @@ export default function Home() {
           <h2>数据透明，<br />假设清晰。</h2>
           <div className="method__steps">
             <article><span>01</span><div><h3>原始积分快照</h3><p>覆盖 12,580 个 Ethereum 与 XRPL 地址，包含两个 Season 的存款、邀请人和被邀请积分。</p></div></article>
-            <article><span>02</span><div><h3>比例分配模型</h3><p>默认按全体积分占比估算；如果空投按链独立分配，可切换到“同链积分池”。</p></div></article>
+            <article><span>02</span><div><h3>$XDP FDV 模型</h3><p>默认按 $200M FDV、5% 空投比例和全体积分占比估算；如果按链独立分配，可切换到“同链积分池”。</p></div></article>
             <article><span>03</span><div><h3>非官方预测</h3><p>工具不代表 Doppler 官方分配方案，也不构成财务建议。请将结果作为情景分析，而不是最终承诺。</p></div></article>
           </div>
         </div>
