@@ -11,6 +11,9 @@ test("exports a GitHub Pages compatible calculator", async () => {
   assert.match(html, /\$XDP/);
   assert.match(html, /value="200000000"/);
   assert.match(html, /value="5"/);
+  assert.match(html, /10B \$XDP/);
+  assert.match(html, /500M \$XDP/);
+  assert.match(html, /\$0\.02/);
   assert.match(html, /href="\/favicon\.svg"/);
   assert.match(html, /查询后将在这里显示排名/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);

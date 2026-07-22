@@ -32,6 +32,7 @@ type DatasetSummary = {
 };
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+const XDP_TOTAL_SUPPLY = 10_000_000_000;
 
 const numberFormat = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
@@ -195,8 +196,11 @@ export default function Home() {
       : totalPoints
     : totalPoints;
   const walletShare = selected && denominator > 0 ? selected.total / denominator : 0;
-  const airdropValuation = fdv * (ratio / 100);
-  const estimatedValue = airdropValuation * walletShare;
+  const impliedTokenPrice = fdv / XDP_TOTAL_SUPPLY;
+  const airdropTokenPool = XDP_TOTAL_SUPPLY * (ratio / 100);
+  const estimatedTokens = airdropTokenPool * walletShare;
+  const airdropValuation = airdropTokenPool * impliedTokenPrice;
+  const estimatedValue = estimatedTokens * impliedTokenPrice;
   const leadingPercent = selected && summary ? ((summary.wallets - selected.rank) / summary.wallets) * 100 : 0;
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
@@ -370,16 +374,23 @@ export default function Home() {
               <div><input type="number" min="0" max="100" step="0.5" value={airdropRatio} onChange={(event) => setAirdropRatio(event.target.value)} /><em>%</em></div>
             </label>
             <div className="estimate-output">
-              <span>你的 $XDP 预估空投价值</span>
-              <strong>{selected ? `$${formatNumber(estimatedValue)}` : "—"}</strong>
-              <small>USD</small>
+              <span>你的预估 $XDP 空投</span>
+              <strong>{selected ? formatNumber(estimatedTokens) : "—"}</strong>
+              <small>$XDP</small>
+              <div className="estimate-output__value">
+                <span>预估价值</span>
+                <b>{selected ? `$${formatNumber(estimatedValue)}` : "—"}</b>
+              </div>
             </div>
             <div className="estimate-meta">
-              <div><span>积分占比</span><strong>{selected ? formatPercent(walletShare * 100, 6) : "—"}</strong></div>
-              <div><span>$XDP 空投池估值</span><strong>{`$${formatNumber(airdropValuation)}`}</strong></div>
+              <div><span>$XDP 总供应量</span><strong>{formatCompact(XDP_TOTAL_SUPPLY)} $XDP</strong></div>
+              <div><span>FDV 隐含币价</span><strong>{`$${formatNumber(impliedTokenPrice)}`}</strong></div>
+              <div><span>空投代币总量</span><strong>{formatCompact(airdropTokenPool)} $XDP</strong></div>
+              <div><span>空投池估值</span><strong>{`$${formatCompact(airdropValuation)}`}</strong></div>
+              <div><span>钱包积分占比</span><strong>{selected ? formatPercent(walletShare * 100, 6) : "—"}</strong></div>
             </div>
             <p className="estimate-note">
-              估算公式：$XDP FDV × 空投比例 × 钱包在所选积分池中的占比。实际分配规则可能包含门槛、分层或其他系数。
+              固定总供应量为 10B $XDP。FDV 决定隐含币价，空投比例决定代币池数量，再按钱包在所选积分池中的占比分配。实际规则可能包含其他系数。
             </p>
           </article>
         </div>
@@ -419,7 +430,7 @@ export default function Home() {
           <h2>数据透明，<br />假设清晰。</h2>
           <div className="method__steps">
             <article><span>01</span><div><h3>原始积分快照</h3><p>覆盖 12,580 个 Ethereum 与 XRPL 地址，包含两个 Season 的存款、邀请人和被邀请积分。</p></div></article>
-            <article><span>02</span><div><h3>$XDP FDV 模型</h3><p>默认按 $200M FDV、5% 空投比例和全体积分占比估算；如果按链独立分配，可切换到“同链积分池”。</p></div></article>
+            <article><span>02</span><div><h3>$XDP FDV 模型</h3><p>总供应量固定为 10B $XDP。默认 $200M FDV 对应 $0.02 币价，5% 空投对应 500M $XDP，再按积分占比分配。</p></div></article>
             <article><span>03</span><div><h3>非官方预测</h3><p>工具不代表 Doppler 官方分配方案，也不构成财务建议。请将结果作为情景分析，而不是最终承诺。</p></div></article>
           </div>
         </div>
