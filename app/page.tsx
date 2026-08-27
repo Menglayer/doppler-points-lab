@@ -4,8 +4,11 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type WalletRecord = {
   rank: number;
+  sourceRank: number;
   chain: string;
   address: string;
+  receivingAddress: string;
+  registeredAt: string;
   season1Total: number;
   season1Deposit: number;
   season1Referrer: number;
@@ -23,7 +26,9 @@ type WalletRecord = {
 
 type DatasetSummary = {
   generated_at_utc: string;
+  source_wallets: number;
   wallets: number;
+  receiving_addresses: number;
   wallets_by_chain: Record<string, number>;
   status_counts: Record<string, number>;
   season_1_total_dp: string;
@@ -33,6 +38,16 @@ type DatasetSummary = {
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const XDP_TOTAL_SUPPLY = 10_000_000_000;
+const AIRDROP_RATIO = 0.01;
+const VERIFIED_ASPECTA_FDV = 170_649_818.1;
+const ASPECTA_PROJECT_URL = "https://trade.aspecta.ai/projects/usdt/doppler.finance";
+const ASPECTA_POOL_ADDRESS = "0x9803Bc0c3A9bC8127E4e76CB596C91bDbfb66fA5";
+const ASPECTA_PAYMENT_TOKEN = "0x55d398326f99059fF775485246999027B3197955";
+const BSC_RPC_URLS = [
+  "https://bsc-rpc.publicnode.com",
+  "https://bsc-dataseed.binance.org/",
+  "https://1rpc.io/bnb",
+];
 
 const numberFormat = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
@@ -41,6 +56,11 @@ const numberFormat = new Intl.NumberFormat("en-US", {
 const compactFormat = new Intl.NumberFormat("en-US", {
   notation: "compact",
   maximumFractionDigits: 2,
+});
+
+const priceFormat = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 4,
+  maximumFractionDigits: 6,
 });
 
 function parseCsvLine(line: string) {
@@ -71,31 +91,82 @@ function parseCsvLine(line: string) {
 
 function parseWallets(csv: string): WalletRecord[] {
   const lines = csv.trim().split(/\r?\n/);
-  const headers = parseCsvLine(lines[0]);
+  const headers = parseCsvLine(lines[0]).map((header) => header.replace(/^\uFEFF/, ""));
   const column = Object.fromEntries(headers.map((header, index) => [header, index]));
   const numeric = (values: string[], key: string) => Number(values[column[key]] || 0);
 
   return lines.slice(1).map((line) => {
     const values = parseCsvLine(line);
     return {
-      rank: numeric(values, "rank"),
-      chain: values[column.chain],
-      address: values[column.address],
+      rank: 0,
+      sourceRank: numeric(values, "source_rank"),
+      chain: values[column.blockchain],
+      address: values[column.earning_address],
+      receivingAddress: values[column.receiving_base_address],
+      registeredAt: values[column.registered_at_utc],
       season1Total: numeric(values, "season_1_total_dp"),
-      season1Deposit: numeric(values, "season_1_deposit_dp"),
-      season1Referrer: numeric(values, "season_1_referrer_dp"),
-      season1Referee: numeric(values, "season_1_referee_dp"),
+      season1Deposit: 0,
+      season1Referrer: 0,
+      season1Referee: 0,
       season2Total: numeric(values, "season_2_total_dp"),
-      season2Deposit: numeric(values, "season_2_deposit_dp"),
-      season2Referrer: numeric(values, "season_2_referrer_dp"),
-      season2Referee: numeric(values, "season_2_referee_dp"),
+      season2Deposit: 0,
+      season2Referrer: 0,
+      season2Referee: 0,
       total: numeric(values, "all_seasons_total_dp"),
       deposit: numeric(values, "all_seasons_deposit_dp"),
       referrer: numeric(values, "all_seasons_referrer_dp"),
       referee: numeric(values, "all_seasons_referee_dp"),
-      status: values[column.status],
+      status: values[column.registered] === "true" ? "registered" : values[column.query_status],
     };
-  });
+  }).sort((a, b) => b.total - a.total).map((wallet, index) => ({ ...wallet, rank: index + 1 }));
+}
+
+function decodeUint256Word(hex: string, index = 0) {
+  const start = 2 + index * 64;
+  return BigInt(`0x${hex.slice(start, start + 64)}`);
+}
+
+async function fetchBscRpcCall(to: string, data: string) {
+  for (const rpcUrl of BSC_RPC_URLS) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 6500);
+    try {
+      const response = await fetch(rpcUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: Date.now(),
+          method: "eth_call",
+          params: [{ to, data }, "latest"],
+        }),
+        signal: controller.signal,
+      });
+      if (!response.ok) continue;
+      const payload = await response.json() as { result?: string };
+      if (payload.result && payload.result !== "0x") return payload.result;
+    } catch {
+      // Try the next public RPC endpoint.
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+  return null;
+}
+
+async function fetchAspectaPremarketFdv() {
+  const [priceRaw, settlementRaw, decimalsRaw] = await Promise.all([
+    fetchBscRpcCall(ASPECTA_POOL_ADDRESS, "0xeb91d37e"),
+    fetchBscRpcCall(ASPECTA_POOL_ADDRESS, "0xe805156e"),
+    fetchBscRpcCall(ASPECTA_PAYMENT_TOKEN, "0x313ce567"),
+  ]);
+  if (!priceRaw || !settlementRaw || !decimalsRaw) return null;
+
+  const paymentDecimals = Number(decodeUint256Word(decimalsRaw));
+  const keyPriceUsd = Number(decodeUint256Word(priceRaw)) / 10 ** paymentDecimals;
+  const redeemRatio = Number(decodeUint256Word(settlementRaw, 2)) / 1e18;
+  const fdv = redeemRatio > 0 ? keyPriceUsd / redeemRatio : 0;
+  return Number.isFinite(fdv) && fdv > 0 ? fdv : null;
 }
 
 function formatNumber(value: number) {
@@ -104,6 +175,10 @@ function formatNumber(value: number) {
 
 function formatCompact(value: number) {
   return Number.isFinite(value) ? compactFormat.format(value) : "—";
+}
+
+function formatPrice(value: number) {
+  return Number.isFinite(value) ? priceFormat.format(value) : "—";
 }
 
 function formatPercent(value: number, digits = 4) {
@@ -137,18 +212,17 @@ export default function Home() {
   const [selected, setSelected] = useState<WalletRecord | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [estimatedFdv, setEstimatedFdv] = useState("200000000");
-  const [airdropRatio, setAirdropRatio] = useState("5");
-  const [scope, setScope] = useState<"global" | "chain">("global");
-  const [copied, setCopied] = useState(false);
+  const [aspectaFdv, setAspectaFdv] = useState(VERIFIED_ASPECTA_FDV);
+  const [aspectaStatus, setAspectaStatus] = useState<"syncing" | "live" | "fallback">("syncing");
+  const [copied, setCopied] = useState<"earning" | "receiving" | null>(null);
 
   useEffect(() => {
     Promise.all([
-      fetch(`${basePath}/data/doppler_points_results.csv`).then((response) => {
+      fetch(`${basePath}/data/doppler_registered_addresses.csv`).then((response) => {
         if (!response.ok) throw new Error("积分数据加载失败");
         return response.text();
       }),
-      fetch(`${basePath}/data/doppler_points_summary.json`).then((response) => {
+      fetch(`${basePath}/data/doppler_registration_summary.json`).then((response) => {
         if (!response.ok) throw new Error("积分摘要加载失败");
         return response.json() as Promise<DatasetSummary>;
       }),
@@ -173,31 +247,30 @@ export default function Home() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    fetchAspectaPremarketFdv()
+      .then((fdv) => {
+        if (fdv) {
+          setAspectaFdv(fdv);
+          setAspectaStatus("live");
+        } else {
+          setAspectaStatus("fallback");
+        }
+      })
+      .catch(() => setAspectaStatus("fallback"));
+  }, []);
+
   const walletLookup = useMemo(
     () => new Map(wallets.map((wallet) => [wallet.address.toLowerCase(), wallet])),
     [wallets],
   );
 
-  const chainTotals = useMemo(
-    () =>
-      wallets.reduce<Record<string, number>>((totals, wallet) => {
-        totals[wallet.chain] = (totals[wallet.chain] ?? 0) + wallet.total;
-        return totals;
-      }, {}),
-    [wallets],
-  );
-
   const totalPoints = Number(summary?.all_seasons_total_dp ?? 0);
-  const fdv = Number(estimatedFdv) || 0;
-  const ratio = Math.min(Math.max(Number(airdropRatio) || 0, 0), 100);
-  const denominator = selected
-    ? scope === "chain"
-      ? chainTotals[selected.chain] ?? 0
-      : totalPoints
-    : totalPoints;
+  const fdv = aspectaFdv;
+  const denominator = totalPoints;
   const walletShare = selected && denominator > 0 ? selected.total / denominator : 0;
   const impliedTokenPrice = fdv / XDP_TOTAL_SUPPLY;
-  const airdropTokenPool = XDP_TOTAL_SUPPLY * (ratio / 100);
+  const airdropTokenPool = XDP_TOTAL_SUPPLY * AIRDROP_RATIO;
   const estimatedTokens = airdropTokenPool * walletShare;
   const airdropValuation = airdropTokenPool * impliedTokenPrice;
   const estimatedValue = estimatedTokens * impliedTokenPrice;
@@ -224,11 +297,10 @@ export default function Home() {
     window.history.replaceState(null, "", `${window.location.pathname}?address=${encodeURIComponent(match.address)}`);
   }
 
-  async function copyAddress() {
-    if (!selected) return;
-    await navigator.clipboard.writeText(selected.address);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
+  async function copyAddress(value: string, kind: "earning" | "receiving") {
+    await navigator.clipboard.writeText(value);
+    setCopied(kind);
+    window.setTimeout(() => setCopied(null), 1600);
   }
 
   return (
@@ -258,19 +330,19 @@ export default function Home() {
           </div>
           <div className="hero__aside">
             <p>
-              搜索 Ethereum 或 XRPL 地址，查看 Season 1 + Season 2 积分、全局排名，
-              并按你设定的 $XDP FDV 与空投比例直接估算美元价值。
+              搜索已登记的 Ethereum 或 XRPL earning 地址，查看积分与登记信息，
+              并按 Aspecta 实时盘前 FDV 和固定 1% 空投比例估算 $XDP 价值。
             </p>
             <a className="primary-button" href="#calculator">开始计算 <span>↗</span></a>
           </div>
         </div>
         <div className="hero__stats" aria-label="数据摘要">
           <article>
-            <span>快照地址</span>
+            <span>确认已登记</span>
             <strong>{summary ? formatNumber(summary.wallets) : "—"}</strong>
           </article>
           <article>
-            <span>全季总积分</span>
+            <span>已登记总积分</span>
             <strong>{summary ? formatCompact(totalPoints) : "—"}</strong>
           </article>
           <article>
@@ -291,11 +363,11 @@ export default function Home() {
       <section className="calculator section-shell" id="calculator">
         <div className="section-heading">
           <div className="section-tag"><span>Doppler.finance</span><span>{`{ Calculator }`}</span></div>
-          <h2>输入地址，<br />查看你的积分位置。</h2>
+          <h2>输入登记地址，<br />查看你的空投预估。</h2>
         </div>
 
         <form className="wallet-search" onSubmit={handleSearch}>
-          <label htmlFor="wallet-address">钱包地址</label>
+          <label htmlFor="wallet-address">Earning 地址</label>
           <div className="wallet-search__row">
             <input
               id="wallet-address"
@@ -308,7 +380,7 @@ export default function Home() {
             <button type="submit" disabled={loading}>{loading ? "加载中" : "查询积分"}</button>
           </div>
           <p className={error ? "form-note form-note--error" : "form-note"} role={error ? "alert" : undefined}>
-            {error || "仅在本地浏览器内搜索，地址不会被上传。"}
+            {error || "仅查询 2,646 个已确认登记地址；地址只在本地浏览器中匹配。"}
           </p>
         </form>
 
@@ -321,15 +393,19 @@ export default function Home() {
                   <span>数据状态 · {selected.status.toUpperCase()}</span>
                 </div>
                 <div className="wallet-card__address">
-                  <span>{selected.address}</span>
-                  <button type="button" onClick={copyAddress}>{copied ? "已复制" : "复制"}</button>
+                  <div><small>Earning address</small><span>{selected.address}</span></div>
+                  <button type="button" onClick={() => copyAddress(selected.address, "earning")}>{copied === "earning" ? "已复制" : "复制"}</button>
+                </div>
+                <div className="wallet-card__address wallet-card__address--receiving">
+                  <div><small>Base receiving address</small><span>{selected.receivingAddress}</span></div>
+                  <button type="button" onClick={() => copyAddress(selected.receivingAddress, "receiving")}>{copied === "receiving" ? "已复制" : "复制"}</button>
                 </div>
                 <div className="rank-lockup">
                   <div>
-                    <span>全局排名</span>
+                    <span>已登记积分排名</span>
                     <strong>#{formatNumber(selected.rank)}</strong>
                   </div>
-                  <p>领先快照中 <b>{formatPercent(leadingPercent, 2)}</b> 的地址</p>
+                  <p>领先已登记地址中的 <b>{formatPercent(leadingPercent, 2)}</b> · 原全量排名 #{selected.sourceRank}</p>
                 </div>
                 <div className="points-total">
                   <span>Season 1 + 2 总积分</span>
@@ -361,18 +437,21 @@ export default function Home() {
               <span>$XDP 空投情景</span>
               <b>$XDP</b>
             </div>
-            <div className="scope-toggle" role="group" aria-label="积分池范围">
-              <button type="button" className={scope === "global" ? "active" : ""} onClick={() => setScope("global")}>全体积分池</button>
-              <button type="button" className={scope === "chain" ? "active" : ""} onClick={() => setScope("chain")}>同链积分池</button>
+            <div className="market-assumptions">
+              <div className="market-assumption">
+                <span>Aspecta 盘前 FDV</span>
+                <strong>{`$${formatCompact(fdv)}`}</strong>
+                <small className={`market-status market-status--${aspectaStatus}`}>
+                  {aspectaStatus === "live" ? "链上实时" : aspectaStatus === "syncing" ? "正在同步" : "最近验证值"}
+                </small>
+                <a href={ASPECTA_PROJECT_URL} target="_blank" rel="noreferrer">查看 Aspecta ↗</a>
+              </div>
+              <div className="market-assumption">
+                <span>$XDP 空投比例</span>
+                <strong>1%</strong>
+                <small>固定参数</small>
+              </div>
             </div>
-            <label className="number-field">
-              <span>$XDP 预估 FDV</span>
-              <div><input type="number" min="0" step="10000000" value={estimatedFdv} onChange={(event) => setEstimatedFdv(event.target.value)} /><em>USD</em></div>
-            </label>
-            <label className="number-field">
-              <span>预估空投比例</span>
-              <div><input type="number" min="0" max="100" step="0.5" value={airdropRatio} onChange={(event) => setAirdropRatio(event.target.value)} /><em>%</em></div>
-            </label>
             <div className="estimate-output">
               <span>你的预估 $XDP 空投</span>
               <strong>{selected ? formatNumber(estimatedTokens) : "—"}</strong>
@@ -384,13 +463,13 @@ export default function Home() {
             </div>
             <div className="estimate-meta">
               <div><span>$XDP 总供应量</span><strong>{formatCompact(XDP_TOTAL_SUPPLY)} $XDP</strong></div>
-              <div><span>FDV 隐含币价</span><strong>{`$${formatNumber(impliedTokenPrice)}`}</strong></div>
+              <div><span>FDV 隐含币价</span><strong>{`$${formatPrice(impliedTokenPrice)}`}</strong></div>
               <div><span>空投代币总量</span><strong>{formatCompact(airdropTokenPool)} $XDP</strong></div>
               <div><span>空投池估值</span><strong>{`$${formatCompact(airdropValuation)}`}</strong></div>
               <div><span>钱包积分占比</span><strong>{selected ? formatPercent(walletShare * 100, 6) : "—"}</strong></div>
             </div>
             <p className="estimate-note">
-              固定总供应量为 10B $XDP。FDV 决定隐含币价，空投比例决定代币池数量，再按钱包在所选积分池中的占比分配。实际规则可能包含其他系数。
+              固定总供应量为 10B $XDP、空投比例为 1%。FDV 来自 Aspecta Doppler 盘前池的链上价格；钱包份额按已确认登记地址的积分池计算。
             </p>
           </article>
         </div>
@@ -402,7 +481,7 @@ export default function Home() {
             <div className="section-tag"><span>Doppler.finance</span><span>{`{ Top wallets }`}</span></div>
             <h2>积分排名前列</h2>
           </div>
-          <p>基于当前离线快照，按 Season 1 + 2 总积分排序。</p>
+          <p>仅包含已确认登记地址，按 Season 1 + 2 总积分重新排序。</p>
         </div>
         <div className="table-wrap">
           <table>
@@ -429,16 +508,16 @@ export default function Home() {
         <div className="method__grid">
           <h2>数据透明，<br />假设清晰。</h2>
           <div className="method__steps">
-            <article><span>01</span><div><h3>原始积分快照</h3><p>覆盖 12,580 个 Ethereum 与 XRPL 地址，包含两个 Season 的存款、邀请人和被邀请积分。</p></div></article>
-            <article><span>02</span><div><h3>$XDP FDV 模型</h3><p>总供应量固定为 10B $XDP。默认 $200M FDV 对应 $0.02 币价，5% 空投对应 500M $XDP，再按积分占比分配。</p></div></article>
-            <article><span>03</span><div><h3>非官方预测</h3><p>工具不代表 Doppler 官方分配方案，也不构成财务建议。请将结果作为情景分析，而不是最终承诺。</p></div></article>
+            <article><span>01</span><div><h3>已确认登记快照</h3><p>从 12,580 个源地址中确认 2,646 个已登记地址；400 个查询错误不计入未登记，也不进入本计算器分母。</p></div></article>
+            <article><span>02</span><div><h3>Aspecta 实时 FDV</h3><p>通过 Aspecta Doppler 盘前池的 BSC 只读合约调用计算 FDV；总供应量固定 10B $XDP，空投比例固定 1%，即 100M $XDP。</p></div></article>
+            <article><span>03</span><div><h3>非官方预测</h3><p>积分按已确认登记地址比例分配；未解决的查询错误或官方门槛、分层、过滤规则都可能改变最终结果。本工具不构成财务建议。</p></div></article>
           </div>
         </div>
       </section>
 
       <footer>
         <div className="brand brand--footer"><span className="brand__mark" aria-hidden="true"><i /></span><span>Doppler Points Lab</span></div>
-        <p>Independent analytics interface · Snapshot 2026-07-21</p>
+        <p>Independent analytics interface · Registration snapshot 2026-08-05</p>
         <a href="#top">Back to top ↑</a>
       </footer>
     </main>

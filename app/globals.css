@@ -447,6 +447,25 @@ main {
   text-overflow: ellipsis;
 }
 
+.wallet-card__address > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.wallet-card__address small {
+  color: #6c6c67;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.wallet-card__address--receiving {
+  margin-top: -1px;
+}
+
 .wallet-card__address button {
   flex: none;
   padding: 7px 10px;
@@ -685,6 +704,74 @@ main {
 .scope-toggle button.active {
   background: #0b0b0b;
   color: #f4f4f0;
+}
+
+.market-assumptions {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.market-assumption {
+  display: flex;
+  min-height: 132px;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 16px;
+  border: 1px solid #c8c8c2;
+  border-radius: 11px;
+  background: #f8f8f4;
+}
+
+.market-assumption > span {
+  color: #5f5f5a;
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.market-assumption strong {
+  margin-top: 10px;
+  font-size: 25px;
+  font-weight: 520;
+  letter-spacing: -0.04em;
+}
+
+.market-assumption small {
+  margin-top: 7px;
+  color: #777770;
+  font-size: 10px;
+}
+
+.market-assumption a {
+  margin-top: auto;
+  color: #484844;
+  font-size: 10px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.market-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.market-status::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #9a9a92;
+  content: "";
+}
+
+.market-status--live::before {
+  background: #4e9d3e;
+}
+
+.market-status--fallback::before {
+  background: #c68032;
 }
 
 .number-field {
@@ -1118,6 +1205,14 @@ footer a {
 
   .wallet-card__address {
     font-size: 10px;
+  }
+
+  .market-assumptions {
+    grid-template-columns: 1fr;
+  }
+
+  .market-assumption {
+    min-height: 120px;
   }
 
   .rank-lockup {

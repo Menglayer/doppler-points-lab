@@ -1,0 +1,18 @@
+{
+  "generated_at_utc": "2026-08-05T04:12:32.931Z",
+  "source_wallets": 12580,
+  "wallets": 2646,
+  "receiving_addresses": 2377,
+  "wallets_by_chain": {
+    "ethereum": 101,
+    "xrpl": 2545
+  },
+  "status_counts": {
+    "registered": 2646,
+    "unregistered": 9534,
+    "query_errors": 400
+  },
+  "season_1_total_dp": "4082251562.778769009624605",
+  "season_2_total_dp": "3818523591.24748799448471",
+  "all_seasons_total_dp": "7900775154.031064013103315"
+}
