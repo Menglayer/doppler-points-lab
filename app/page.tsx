@@ -271,7 +271,7 @@ export default function Home() {
   const walletShare = selected && denominator > 0 ? selected.total / denominator : 0;
   const impliedTokenPrice = fdv / XDP_TOTAL_SUPPLY;
   const airdropTokenPool = XDP_TOTAL_SUPPLY * AIRDROP_RATIO;
-  const estimatedTokens = airdropTokenPool * walletShare;
+  const estimatedTokens = airdropTokenPool * walletShare * 0.7;
   const airdropValuation = airdropTokenPool * impliedTokenPrice;
   const estimatedValue = estimatedTokens * impliedTokenPrice;
   const leadingPercent = selected && summary ? ((summary.wallets - selected.rank) / summary.wallets) * 100 : 0;
