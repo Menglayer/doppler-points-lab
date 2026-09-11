@@ -3,9 +3,13 @@ import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
 const outputRoot = new URL("../out/", import.meta.url);
+const sourceRoot = new URL("../", import.meta.url);
 
 test("exports a GitHub Pages compatible calculator", async () => {
-  const html = await readFile(new URL("index.html", outputRoot), "utf8");
+  const [html, pageSource] = await Promise.all([
+    readFile(new URL("index.html", outputRoot), "utf8"),
+    readFile(new URL("app/page.tsx", sourceRoot), "utf8"),
+  ]);
   assert.match(html, /Doppler 空投计算器/);
   assert.match(html, /Points Lab/);
   assert.match(html, /\$XDP/);
@@ -20,6 +24,8 @@ test("exports a GitHub Pages compatible calculator", async () => {
   assert.doesNotMatch(html, /value="200000000"|value="5"/);
   assert.match(html, /href="\/favicon\.svg"/);
   assert.match(html, /查询后将在这里显示最终排名/);
+  assert.match(pageSource, /https:\/\/basescan\.org\/tx\//);
+  assert.doesNotMatch(pageSource, /bscscan\.com/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 

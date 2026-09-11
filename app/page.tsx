@@ -361,7 +361,7 @@ export default function Home() {
                   <div><span>分配区块</span><strong>{formatNumber(selected.block)}</strong></div>
                   <div><span>精确数量</span><strong title={selected.allocationExact}>{selected.allocationExact}</strong></div>
                   <div><span>Raw Amount</span><strong title={selected.rawAmount}>{selected.rawAmount}</strong></div>
-                  <a href={`https://bscscan.com/tx/${selected.txHash}`} target="_blank" rel="noreferrer">查看链上交易 ↗</a>
+                  <a href={`https://basescan.org/tx/${selected.txHash}`} target="_blank" rel="noreferrer">查看链上交易 ↗</a>
                 </div>
               </>
             ) : (
@@ -438,7 +438,7 @@ export default function Home() {
                   <td title={wallet.address}>{`${wallet.address.slice(0, 7)}…${wallet.address.slice(-5)}`}</td>
                   <td>{formatNumber(wallet.allocation)}</td>
                   <td>{formatNumber(wallet.block)}</td>
-                  <td><a href={`https://bscscan.com/tx/${wallet.txHash}`} target="_blank" rel="noreferrer">BscScan ↗</a></td>
+                  <td><a href={`https://basescan.org/tx/${wallet.txHash}`} target="_blank" rel="noreferrer">BaseScan ↗</a></td>
                 </tr>
               ))}
             </tbody>
