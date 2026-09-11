@@ -543,6 +543,45 @@ main {
   letter-spacing: 0;
 }
 
+.allocation-proof {
+  display: grid;
+  gap: 0;
+  margin-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.allocation-proof > div {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 16px;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.allocation-proof span {
+  color: #6c6c67;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.allocation-proof strong {
+  overflow: hidden;
+  color: #d2d2cc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  text-align: right;
+  text-overflow: ellipsis;
+}
+
+.allocation-proof a {
+  margin-top: 18px;
+  color: var(--accent);
+  font-size: 11px;
+  text-underline-offset: 4px;
+}
+
 .season-pair {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -961,6 +1000,16 @@ td:last-child {
 
 td:last-child {
   text-align: right;
+}
+
+td a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+td a:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 th:last-child {

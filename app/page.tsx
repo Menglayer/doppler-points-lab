@@ -2,38 +2,23 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-type WalletRecord = {
+type AllocationRecord = {
   rank: number;
-  sourceRank: number;
-  chain: string;
   address: string;
-  receivingAddress: string;
-  registeredAt: string;
-  season1Total: number;
-  season1Deposit: number;
-  season1Referrer: number;
-  season1Referee: number;
-  season2Total: number;
-  season2Deposit: number;
-  season2Referrer: number;
-  season2Referee: number;
-  total: number;
-  deposit: number;
-  referrer: number;
-  referee: number;
-  status: string;
+  allocation: number;
+  allocationExact: string;
+  rawAmount: string;
+  block: number;
+  txHash: string;
 };
 
 type DatasetSummary = {
-  generated_at_utc: string;
-  source_wallets: number;
   wallets: number;
-  receiving_addresses: number;
-  wallets_by_chain: Record<string, number>;
-  status_counts: Record<string, number>;
-  season_1_total_dp: string;
-  season_2_total_dp: string;
-  all_seasons_total_dp: string;
+  unique_addresses: number;
+  total_xdp_allocation: string;
+  transaction_count: number;
+  first_block: number;
+  last_block: number;
 };
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -89,7 +74,7 @@ function parseCsvLine(line: string) {
   return values;
 }
 
-function parseWallets(csv: string): WalletRecord[] {
+function parseAllocations(csv: string): AllocationRecord[] {
   const lines = csv.trim().split(/\r?\n/);
   const headers = parseCsvLine(lines[0]).map((header) => header.replace(/^\uFEFF/, ""));
   const column = Object.fromEntries(headers.map((header, index) => [header, index]));
@@ -98,27 +83,15 @@ function parseWallets(csv: string): WalletRecord[] {
   return lines.slice(1).map((line) => {
     const values = parseCsvLine(line);
     return {
-      rank: 0,
-      sourceRank: numeric(values, "source_rank"),
-      chain: values[column.blockchain],
-      address: values[column.earning_address],
-      receivingAddress: values[column.receiving_base_address],
-      registeredAt: values[column.registered_at_utc],
-      season1Total: numeric(values, "season_1_total_dp"),
-      season1Deposit: 0,
-      season1Referrer: 0,
-      season1Referee: 0,
-      season2Total: numeric(values, "season_2_total_dp"),
-      season2Deposit: 0,
-      season2Referrer: 0,
-      season2Referee: 0,
-      total: numeric(values, "all_seasons_total_dp"),
-      deposit: numeric(values, "all_seasons_deposit_dp"),
-      referrer: numeric(values, "all_seasons_referrer_dp"),
-      referee: numeric(values, "all_seasons_referee_dp"),
-      status: values[column.registered] === "true" ? "registered" : values[column.query_status],
+      rank: numeric(values, "Rank"),
+      address: values[column.Address],
+      allocation: numeric(values, "XDP Allocation"),
+      allocationExact: values[column["XDP Allocation"]],
+      rawAmount: values[column["Raw Amount"]],
+      block: numeric(values, "Block"),
+      txHash: values[column["Tx Hash"]],
     };
-  }).sort((a, b) => b.total - a.total).map((wallet, index) => ({ ...wallet, rank: index + 1 }));
+  }).sort((a, b) => a.rank - b.rank);
 }
 
 function decodeUint256Word(hex: string, index = 0) {
@@ -186,49 +159,30 @@ function formatPercent(value: number, digits = 4) {
   return `${value.toFixed(digits)}%`;
 }
 
-function chainName(chain: string) {
-  return chain.toLowerCase() === "ethereum" ? "Ethereum" : "XRPL";
-}
-
-function MetricBar({ label, value, total }: { label: string; value: number; total: number }) {
-  const width = total > 0 ? Math.max((value / total) * 100, value > 0 ? 1.25 : 0) : 0;
-  return (
-    <div className="metric-bar">
-      <div className="metric-bar__head">
-        <span>{label}</span>
-        <strong>{formatNumber(value)}</strong>
-      </div>
-      <div className="metric-bar__track" aria-hidden="true">
-        <span style={{ width: `${Math.min(width, 100)}%` }} />
-      </div>
-    </div>
-  );
-}
-
 export default function Home() {
-  const [wallets, setWallets] = useState<WalletRecord[]>([]);
+  const [wallets, setWallets] = useState<AllocationRecord[]>([]);
   const [summary, setSummary] = useState<DatasetSummary | null>(null);
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<WalletRecord | null>(null);
+  const [selected, setSelected] = useState<AllocationRecord | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [aspectaFdv, setAspectaFdv] = useState(VERIFIED_ASPECTA_FDV);
   const [aspectaStatus, setAspectaStatus] = useState<"syncing" | "live" | "fallback">("syncing");
-  const [copied, setCopied] = useState<"earning" | "receiving" | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     Promise.all([
-      fetch(`${basePath}/data/doppler_registered_addresses.csv`).then((response) => {
-        if (!response.ok) throw new Error("积分数据加载失败");
+      fetch(`${basePath}/data/xdp_airdrop_allocations.csv`).then((response) => {
+        if (!response.ok) throw new Error("最终分配数据加载失败");
         return response.text();
       }),
-      fetch(`${basePath}/data/doppler_registration_summary.json`).then((response) => {
-        if (!response.ok) throw new Error("积分摘要加载失败");
+      fetch(`${basePath}/data/xdp_airdrop_summary.json`).then((response) => {
+        if (!response.ok) throw new Error("最终分配摘要加载失败");
         return response.json() as Promise<DatasetSummary>;
       }),
     ])
       .then(([csv, datasetSummary]) => {
-        const parsed = parseWallets(csv);
+        const parsed = parseAllocations(csv);
         setWallets(parsed);
         setSummary(datasetSummary);
 
@@ -265,15 +219,14 @@ export default function Home() {
     [wallets],
   );
 
-  const totalPoints = Number(summary?.all_seasons_total_dp ?? 0);
+  const totalAllocated = Number(summary?.total_xdp_allocation ?? 0);
   const fdv = aspectaFdv;
-  const denominator = totalPoints;
-  const walletShare = selected && denominator > 0 ? selected.total / denominator : 0;
+  const walletShare = selected && totalAllocated > 0 ? selected.allocation / totalAllocated : 0;
   const impliedTokenPrice = fdv / XDP_TOTAL_SUPPLY;
   const airdropTokenPool = XDP_TOTAL_SUPPLY * AIRDROP_RATIO;
-  const estimatedTokens = airdropTokenPool * walletShare * 0.635;
   const airdropValuation = airdropTokenPool * impliedTokenPrice;
-  const estimatedValue = estimatedTokens * impliedTokenPrice;
+  const allocatedValuation = totalAllocated * impliedTokenPrice;
+  const estimatedValue = (selected?.allocation ?? 0) * impliedTokenPrice;
   const leadingPercent = selected && summary ? ((summary.wallets - selected.rank) / summary.wallets) * 100 : 0;
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
@@ -281,14 +234,14 @@ export default function Home() {
     const cleanQuery = query.trim();
     if (!cleanQuery) {
       setSelected(null);
-      setError("请输入 Ethereum 或 XRPL 钱包地址。");
+      setError("请输入 Base 接收地址。");
       return;
     }
 
     const match = walletLookup.get(cleanQuery.toLowerCase());
     if (!match) {
       setSelected(null);
-      setError("当前快照中没有找到这个地址，请检查输入是否完整。");
+      setError("最终分配名单中没有找到这个地址，请检查输入是否完整。");
       return;
     }
 
@@ -297,10 +250,11 @@ export default function Home() {
     window.history.replaceState(null, "", `${window.location.pathname}?address=${encodeURIComponent(match.address)}`);
   }
 
-  async function copyAddress(value: string, kind: "earning" | "receiving") {
-    await navigator.clipboard.writeText(value);
-    setCopied(kind);
-    window.setTimeout(() => setCopied(null), 1600);
+  async function copyAddress() {
+    if (!selected) return;
+    await navigator.clipboard.writeText(selected.address);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
   }
 
   return (
@@ -325,37 +279,33 @@ export default function Home() {
         </div>
         <div className="hero__grid">
           <div>
-            <p className="hero__kicker">把积分变成可计算的空投预期</p>
+            <p className="hero__kicker">链上最终分配结果</p>
             <h1>Doppler<br />空投计算器</h1>
           </div>
           <div className="hero__aside">
             <p>
-              搜索已登记的 Ethereum 或 XRPL earning 地址，查看积分与登记信息，
-              并按 Aspecta 实时盘前 FDV 和固定 1% 空投比例估算 $XDP 价值。
+              搜索 Base 接收地址，直接查看最终 $XDP 分配数量、链上批次，
+              并按 Aspecta 实时盘前 FDV 换算参考价值。
             </p>
             <a className="primary-button" href="#calculator">开始计算 <span>↗</span></a>
           </div>
         </div>
         <div className="hero__stats" aria-label="数据摘要">
           <article>
-            <span>确认已登记</span>
+            <span>最终分配地址</span>
             <strong>{summary ? formatNumber(summary.wallets) : "—"}</strong>
           </article>
           <article>
-            <span>已登记总积分</span>
-            <strong>{summary ? formatCompact(totalPoints) : "—"}</strong>
+            <span>明细分配合计</span>
+            <strong>{summary ? `${formatCompact(totalAllocated)} XDP` : "—"}</strong>
           </article>
           <article>
-            <span>XRPL / ETH</span>
-            <strong>
-              {summary
-                ? `${formatNumber(summary.wallets_by_chain.xrpl)} / ${formatNumber(summary.wallets_by_chain.ethereum)}`
-                : "—"}
-            </strong>
+            <span>链上批次</span>
+            <strong>{summary ? formatNumber(summary.transaction_count) : "—"}</strong>
           </article>
           <article>
-            <span>数据日期</span>
-            <strong>{summary ? new Date(summary.generated_at_utc).toLocaleDateString("zh-CN") : "—"}</strong>
+            <span>分配区块</span>
+            <strong>{summary ? `${summary.first_block.toLocaleString()}–${summary.last_block.toLocaleString()}` : "—"}</strong>
           </article>
         </div>
       </section>
@@ -363,24 +313,24 @@ export default function Home() {
       <section className="calculator section-shell" id="calculator">
         <div className="section-heading">
           <div className="section-tag"><span>Doppler.finance</span><span>{`{ Calculator }`}</span></div>
-          <h2>输入登记地址，<br />查看你的空投预估。</h2>
+          <h2>输入 Base 地址，<br />查看最终分配。</h2>
         </div>
 
         <form className="wallet-search" onSubmit={handleSearch}>
-          <label htmlFor="wallet-address">Earning 地址</label>
+          <label htmlFor="wallet-address">Base 接收地址</label>
           <div className="wallet-search__row">
             <input
               id="wallet-address"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="0x… 或 r…"
+              placeholder="0x…"
               autoComplete="off"
               spellCheck={false}
             />
-            <button type="submit" disabled={loading}>{loading ? "加载中" : "查询积分"}</button>
+            <button type="submit" disabled={loading}>{loading ? "加载中" : "查询分配"}</button>
           </div>
           <p className={error ? "form-note form-note--error" : "form-note"} role={error ? "alert" : undefined}>
-            {error || "仅查询 2,646 个已确认登记地址；地址只在本地浏览器中匹配。"}
+            {error || "查询 2,717 个最终分配地址；地址只在本地浏览器中匹配。"}
           </p>
         </form>
 
@@ -389,36 +339,29 @@ export default function Home() {
             {selected ? (
               <>
                 <div className="wallet-card__topline">
-                  <span className="chain-pill">{chainName(selected.chain)}</span>
-                  <span>数据状态 · {selected.status.toUpperCase()}</span>
+                  <span className="chain-pill">Base</span>
+                  <span>数据状态 · FINAL</span>
                 </div>
                 <div className="wallet-card__address">
-                  <div><small>Earning address</small><span>{selected.address}</span></div>
-                  <button type="button" onClick={() => copyAddress(selected.address, "earning")}>{copied === "earning" ? "已复制" : "复制"}</button>
-                </div>
-                <div className="wallet-card__address wallet-card__address--receiving">
-                  <div><small>Base receiving address</small><span>{selected.receivingAddress}</span></div>
-                  <button type="button" onClick={() => copyAddress(selected.receivingAddress, "receiving")}>{copied === "receiving" ? "已复制" : "复制"}</button>
+                  <div><small>Base receiving address</small><span>{selected.address}</span></div>
+                  <button type="button" onClick={copyAddress}>{copied ? "已复制" : "复制"}</button>
                 </div>
                 <div className="rank-lockup">
                   <div>
-                    <span>已登记积分排名</span>
+                    <span>最终分配排名</span>
                     <strong>#{formatNumber(selected.rank)}</strong>
                   </div>
-                  <p>领先已登记地址中的 <b>{formatPercent(leadingPercent, 2)}</b> · 原全量排名 #{selected.sourceRank}</p>
+                  <p>领先最终分配地址中的 <b>{formatPercent(leadingPercent, 2)}</b></p>
                 </div>
                 <div className="points-total">
-                  <span>Season 1 + 2 总积分</span>
-                  <strong>{formatNumber(selected.total)} <small>DP</small></strong>
+                  <span>最终 $XDP 分配</span>
+                  <strong>{formatNumber(selected.allocation)} <small>$XDP</small></strong>
                 </div>
-                <div className="season-pair">
-                  <div><span>Season 01</span><strong>{formatNumber(selected.season1Total)}</strong></div>
-                  <div><span>Season 02</span><strong>{formatNumber(selected.season2Total)}</strong></div>
-                </div>
-                <div className="breakdown">
-                  <MetricBar label="存款积分" value={selected.deposit} total={selected.total} />
-                  <MetricBar label="邀请人积分" value={selected.referrer} total={selected.total} />
-                  <MetricBar label="被邀请积分" value={selected.referee} total={selected.total} />
+                <div className="allocation-proof">
+                  <div><span>分配区块</span><strong>{formatNumber(selected.block)}</strong></div>
+                  <div><span>精确数量</span><strong title={selected.allocationExact}>{selected.allocationExact}</strong></div>
+                  <div><span>Raw Amount</span><strong title={selected.rawAmount}>{selected.rawAmount}</strong></div>
+                  <a href={`https://bscscan.com/tx/${selected.txHash}`} target="_blank" rel="noreferrer">查看链上交易 ↗</a>
                 </div>
               </>
             ) : (
@@ -426,7 +369,7 @@ export default function Home() {
                 <span className="empty-orbit" aria-hidden="true"><i /></span>
                 <div>
                   <strong>等待地址</strong>
-                  <p>查询后将在这里显示排名、积分结构与 Season 对比。</p>
+                  <p>查询后将在这里显示最终排名、$XDP 数量与链上分配交易。</p>
                 </div>
               </div>
             )}
@@ -434,7 +377,7 @@ export default function Home() {
 
           <article className="estimate-card">
             <div className="estimate-card__head">
-              <span>$XDP 空投情景</span>
+              <span>$XDP 最终分配</span>
               <b>$XDP</b>
             </div>
             <div className="market-assumptions">
@@ -453,8 +396,8 @@ export default function Home() {
               </div>
             </div>
             <div className="estimate-output">
-              <span>你的预估 $XDP 空投</span>
-              <strong>{selected ? formatNumber(estimatedTokens) : "—"}</strong>
+              <span>你的最终 $XDP 分配</span>
+              <strong>{selected ? formatNumber(selected.allocation) : "—"}</strong>
               <small>$XDP</small>
               <div className="estimate-output__value">
                 <span>预估价值</span>
@@ -464,12 +407,14 @@ export default function Home() {
             <div className="estimate-meta">
               <div><span>$XDP 总供应量</span><strong>{formatCompact(XDP_TOTAL_SUPPLY)} $XDP</strong></div>
               <div><span>FDV 隐含币价</span><strong>{`$${formatPrice(impliedTokenPrice)}`}</strong></div>
-              <div><span>空投代币总量</span><strong>{formatCompact(airdropTokenPool)} $XDP</strong></div>
-              <div><span>空投池估值</span><strong>{`$${formatCompact(airdropValuation)}`}</strong></div>
-              <div><span>钱包积分占比</span><strong>{selected ? formatPercent(walletShare * 100, 6) : "—"}</strong></div>
+              <div><span>1% 空投总池</span><strong>{formatCompact(airdropTokenPool)} $XDP</strong></div>
+              <div><span>1% 总池估值</span><strong>{`$${formatCompact(airdropValuation)}`}</strong></div>
+              <div><span>本明细分配合计</span><strong>{formatCompact(totalAllocated)} $XDP</strong></div>
+              <div><span>本明细参考价值</span><strong>{`$${formatCompact(allocatedValuation)}`}</strong></div>
+              <div><span>占本明细比例</span><strong>{selected ? formatPercent(walletShare * 100, 6) : "—"}</strong></div>
             </div>
             <p className="estimate-note">
-              固定总供应量为 10B $XDP、空投比例为 1%。FDV 来自 Aspecta Doppler 盘前池的链上价格；钱包份额按已确认登记地址的积分池计算。
+              钱包数量直接来自最终分配文件，不再按积分估算。1% 总池为 100M $XDP；当前地址明细合计 {formatNumber(totalAllocated)} $XDP。美元价值按 Aspecta 盘前 FDV 换算，仅供参考。
             </p>
           </article>
         </div>
@@ -479,27 +424,26 @@ export default function Home() {
         <div className="section-heading section-heading--row">
           <div>
             <div className="section-tag"><span>Doppler.finance</span><span>{`{ Top wallets }`}</span></div>
-            <h2>积分排名前列</h2>
+            <h2>最终分配前列</h2>
           </div>
-          <p>仅包含已确认登记地址，按 Season 1 + 2 总积分重新排序。</p>
+          <p>按最终 $XDP 分配数量排序，地址和排名直接来自最终结果。</p>
         </div>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Rank</th><th>Wallet</th><th>Chain</th><th>Season 01</th><th>Season 02</th><th>Total DP</th></tr></thead>
+            <thead><tr><th>Rank</th><th>Base Address</th><th>XDP Allocation</th><th>Block</th><th>Transaction</th></tr></thead>
             <tbody>
               {wallets.slice(0, 8).map((wallet) => (
                 <tr key={wallet.address}>
                   <td>#{wallet.rank.toString().padStart(2, "0")}</td>
                   <td title={wallet.address}>{`${wallet.address.slice(0, 7)}…${wallet.address.slice(-5)}`}</td>
-                  <td><span className="chain-dot" />{chainName(wallet.chain)}</td>
-                  <td>{formatCompact(wallet.season1Total)}</td>
-                  <td>{formatCompact(wallet.season2Total)}</td>
-                  <td>{formatNumber(wallet.total)}</td>
+                  <td>{formatNumber(wallet.allocation)}</td>
+                  <td>{formatNumber(wallet.block)}</td>
+                  <td><a href={`https://bscscan.com/tx/${wallet.txHash}`} target="_blank" rel="noreferrer">BscScan ↗</a></td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {loading && <div className="table-loading">正在读取积分快照…</div>}
+          {loading && <div className="table-loading">正在读取最终分配…</div>}
         </div>
       </section>
 
@@ -508,16 +452,16 @@ export default function Home() {
         <div className="method__grid">
           <h2>数据透明，<br />假设清晰。</h2>
           <div className="method__steps">
-            <article><span>01</span><div><h3>已确认登记快照</h3><p>从 12,580 个源地址中确认 2,646 个已登记地址；400 个查询错误不计入未登记，也不进入本计算器分母。</p></div></article>
-            <article><span>02</span><div><h3>Aspecta 实时 FDV</h3><p>通过 Aspecta Doppler 盘前池的 BSC 只读合约调用计算 FDV；总供应量固定 10B $XDP，空投比例固定 1%，即 100M $XDP。</p></div></article>
-            <article><span>03</span><div><h3>非官方预测</h3><p>积分按已确认登记地址比例分配；未解决的查询错误或官方门槛、分层、过滤规则都可能改变最终结果。本工具不构成财务建议。</p></div></article>
+            <article><span>01</span><div><h3>最终分配数据</h3><p>数据包含 2,717 个唯一 Base 地址、最终 $XDP 数量、原始链上金额、区块与交易哈希；页面直接按最终数量查询和排名。</p></div></article>
+            <article><span>02</span><div><h3>Aspecta 实时 FDV</h3><p>通过 Aspecta Doppler 盘前池的 BSC 只读合约调用计算 FDV，再除以 10B 总供应量得到参考币价。</p></div></article>
+            <article><span>03</span><div><h3>数量与估值分离</h3><p>最终 $XDP 数量来自分配文件，不受 FDV 变化影响；只有美元参考价值随盘前 FDV 变化。本工具不构成财务建议。</p></div></article>
           </div>
         </div>
       </section>
 
       <footer>
         <div className="brand brand--footer"><span className="brand__mark" aria-hidden="true"><i /></span><span>Doppler Points Lab</span></div>
-        <p>Independent analytics interface · Registration snapshot 2026-08-05</p>
+        <p>Independent analytics interface · Final allocation blocks 51,115,411–51,115,422</p>
         <a href="#top">Back to top ↑</a>
       </footer>
     </main>

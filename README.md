@@ -1,6 +1,6 @@
 # Doppler Points Lab
 
-基于 Doppler 登记扫描快照制作的非官方空投情景计算器。支持查询已确认登记的 Ethereum 与 XRPL earning 地址、对应 Base 接收地址、Season 1 / 2 积分与登记地址排名，并按 Aspecta 盘前 FDV 估算空投价值。
+基于 Doppler 最终分配结果制作的非官方查询工具。支持按 Base 接收地址查询最终 `$XDP` 数量、分配排名、区块与交易，并按 Aspecta 盘前 FDV 换算参考价值。
 
 ## 本地运行
 
@@ -33,10 +33,10 @@ npm test
 
 `$XDP 隐含币价 = Aspecta 盘前 FDV ÷ 10B 总供应量`
 
-`钱包预估空投数量 = 10B × 1% ×（钱包积分 ÷ 所选已登记积分池总积分）`
+`钱包最终空投数量 = 最终分配 CSV 中的 XDP Allocation`
 
-空投比例固定为 `1%`，即总空投池为 `100M $XDP`。页面通过 BSC 公共 RPC 只读查询 [Aspecta Doppler 盘前池](https://trade.aspecta.ai/projects/usdt/doppler.finance)；RPC 不可用时显示最近验证的 FDV。
+`钱包参考价值 = 最终 XDP 数量 × FDV 隐含币价`
 
-当前数据包含 2,646 个已确认登记 earning 地址和 2,377 个唯一 Base 接收地址。源扫描中的 400 个查询错误不会被当作未登记，也不会进入当前估算分母。
+固定 `1%` 总池为 `100M $XDP`。最终文件包含 2,717 个唯一 Base 地址，明细合计 `70,762,272.527897447522955691 $XDP`，覆盖 7 笔链上分配交易。页面通过 BSC 公共 RPC 只读查询 [Aspecta Doppler 盘前池](https://trade.aspecta.ai/projects/usdt/doppler.finance)；RPC 不可用时显示最近验证的 FDV。
 
-实际分配规则可能包含门槛、分层、女巫过滤或其他系数。本工具不是 Doppler 官方产品，也不构成财务建议。
+最终数量直接来自提供的分配文件，不再根据积分推算。Aspecta 盘前 FDV 仅影响美元参考价值。本工具不是 Doppler 官方产品，也不构成财务建议。
